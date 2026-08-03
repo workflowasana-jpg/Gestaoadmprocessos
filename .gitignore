@@ -1,0 +1,21 @@
+# Ambiente / segredos
+.env
+.env.local
+.env.*.local
+
+# Dependências
+node_modules/
+
+# Build / Vercel
+.vercel/
+dist/
+build/
+.next/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
