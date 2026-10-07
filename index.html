@@ -140,6 +140,7 @@ dialog::backdrop{background:rgba(10,20,15,.45)}
 .f label{font-weight:600}
 .f input,.f select,.f textarea{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:9px 10px;width:100%}
 .f textarea{min-height:70px;resize:vertical}
+.aviso{color:var(--red);font-size:13px}
 .f input[readonly]{background:transparent;color:var(--muted)}
 .f.chk{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-weight:500}
 .f.chk input{width:18px;height:18px;accent-color:var(--green)}
@@ -437,14 +438,27 @@ const filtros = { colaboradores:{}, atestados:{}, custos:{}, ferias:{} };
 let view = "painel";
 let editando = null; // { mod, row }
 
+let falhas = {};
 async function carregar(){
-  try {
-    const [col,a,c,f] = await Promise.all(["colaboradores","atestados","custos","ferias"].map(t => store.list(t)));
-    data.colaboradores = col; data.atestados = a; data.custos = c; data.ferias = f;
-  } catch (e) {
-    toast("Erro ao carregar dados: " + (e.message || e) + ". Confira se o schema.sql foi executado no Supabase.", true);
-  }
+  const tabelas = ["colaboradores","atestados","custos","ferias"];
+  const res = await Promise.allSettled(tabelas.map(t => store.list(t)));
+  falhas = {};
+  res.forEach((r,i) => {
+    if (r.status === "fulfilled") data[tabelas[i]] = r.value || [];
+    else { falhas[tabelas[i]] = r.reason?.message || String(r.reason); console.error("Falha ao ler", tb(tabelas[i]), r.reason); }
+  });
+  const nomes = Object.keys(falhas);
+  if (nomes.length) toast(`Não foi possível ler: ${nomes.map(tb).join(", ")}. ${Object.values(falhas)[0]}`, true);
   render();
+}
+
+// explica por que a lista de colaboradores está vazia
+function motivoSemColaboradores(){
+  if (!sb) return "O sistema não está conectado ao Supabase. Preencha SUPABASE_URL e SUPABASE_ANON_KEY no topo do index.html e publique de novo.";
+  if (falhas.colaboradores) return `Erro ao ler a tabela ${tb("colaboradores")}: ${falhas.colaboradores}. Rode o schema.sql no Supabase.`;
+  if (!data.colaboradores.length) return `A tabela ${tb("colaboradores")} está vazia. Rode o colaboradores_carga.sql no Supabase ou cadastre em Colaboradores.`;
+  if (!ativos().length) return "Nenhum colaborador está marcado como ativo.";
+  return "";
 }
 
 /* ---------- renderização ---------- */
@@ -545,7 +559,7 @@ function desenharLinhas(nome){
   const m = MOD[nome], rows = filtrar(nome);
   $("#tbody").innerHTML = rows.length
     ? rows.map(r => `<tr data-id="${esc(r.id)}" tabindex="0">${m.cols.map(c => `<td class="${c[2] || ""}">${c[1](r)}</td>`).join("")}</tr>`).join("")
-    : `<tr class="empty-row"><td colspan="${m.cols.length}">${data[nome].length ? "Nenhum registro com esses filtros." : `Nenhum ${m.nome} cadastrado. Use “Novo ${m.nome}” para começar.`}</td></tr>`;
+    : `<tr class="empty-row"><td colspan="${m.cols.length}">${data[nome].length ? "Nenhum registro com esses filtros." : (nome === "colaboradores" ? esc(motivoSemColaboradores()) : `Nenhum ${m.nome} cadastrado. Use “Novo ${m.nome}” para começar.`)}</td></tr>`;
   $("#foot").innerHTML = m.rodape(rows);
   $("#tbody").querySelectorAll("tr[data-id]").forEach(tr => {
     const abrir = () => abrirForm(nome, data[nome].find(r => String(r.id) === tr.dataset.id));
@@ -570,7 +584,7 @@ function abrirForm(nome, row){
       const extra = v && !lista.some(c => c.nome === v) ? `<option value="${esc(v)}" selected>${esc(v)} (fora do cadastro)</option>` : "";
       input = lista.length || extra
         ? `<select id="${id}" name="${fd.k}" ${req}><option value="">Selecione</option>${extra}${lista.map(c => `<option value="${esc(c.nome)}" data-mat="${esc(c.matricula || "")}" ${v === c.nome ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>`
-        : `<select id="${id}" name="${fd.k}" required><option value="">Cadastre colaboradores primeiro</option></select>`;
+        : `<select id="${id}" name="${fd.k}" required><option value="">Nenhum colaborador disponível</option></select><span class="aviso">${esc(motivoSemColaboradores())}</span>`;
     }
     else if (fd.type === "select") input = `<select id="${id}" name="${fd.k}" ${req}>${fd.req ? "" : '<option value=""></option>'}${Object.entries(fd.opts).map(([k,l]) => `<option value="${k}" ${v === k ? "selected" : ""}>${l}</option>`).join("")}</select>`;
     else if (fd.type === "area") input = `<textarea id="${id}" name="${fd.k}">${esc(v)}</textarea>`;
