@@ -9,6 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
 <style>
 :root{
   --paper:#F3F6F3; --surface:#FFFFFF; --ink:#16231C; --muted:#5A6B61; --line:#D7DFD9;
@@ -159,6 +161,24 @@ dialog::backdrop{background:rgba(10,20,15,.45)}
 .login h1{margin:0;font-size:22px}
 .login p{margin:0;color:var(--muted);font-size:14px}
 
+.tit{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start}
+.badge{margin-left:auto;background:#E8B92F;color:#1D3A2A;font-size:12px;font-weight:800;border-radius:99px;min-width:22px;padding:1px 7px;text-align:center}
+.pend-aviso{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:var(--gold-soft);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 18px;margin-bottom:20px}
+.pend{background:var(--gold-soft);border:1px solid var(--gold);border-radius:var(--radius);padding:18px;margin-bottom:22px}
+.pend h3{display:flex;gap:8px;align-items:center}
+.pend-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.pend-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:8px;font-size:14px}
+.pend-card small{display:block;color:var(--muted)}
+.pend-obs{margin:0;font-size:13px;color:var(--muted);font-style:italic}
+.pend-acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.pend-acoes .btn{padding:6px 10px;font-size:13px}
+.lk{padding:18px 22px 22px;display:grid;gap:14px}
+.lk p{margin:0;font-size:14px;color:var(--muted)}
+.lk-row{display:flex;gap:8px}
+.lk-row input{flex:1;min-width:0;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 10px}
+.lk-qr{display:flex;justify-content:center;padding:8px}
+.lk-qr img,.lk-qr canvas{background:#fff;padding:10px;border-radius:8px}
+.lk-dica{text-align:center}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-size:14px;z-index:99;max-width:calc(100% - 32px)}
 .toast.err{background:var(--red);color:#fff}
 @media (prefers-reduced-motion:no-preference){dialog[open]{animation:pop .16s ease-out}@keyframes pop{from{opacity:0;transform:translateY(8px)}}}
@@ -202,7 +222,7 @@ dialog::backdrop{background:rgba(10,20,15,.45)}
     <div class="dlg-head"><h3 id="dlgTitle"></h3><button type="button" class="x" id="dlgClose" aria-label="Fechar">×</button></div>
     <div class="fields" id="fields"></div>
     <div class="dlg-foot">
-      <button class="btn pri" type="submit">Salvar</button>
+      <button class="btn pri" type="submit" id="dlgSalvar">Salvar</button>
       <button class="btn" type="button" id="dlgCancel">Cancelar</button>
       <span class="spacer"></span>
       <button class="btn del" type="button" id="dlgDel">Excluir</button>
@@ -210,14 +230,23 @@ dialog::backdrop{background:rgba(10,20,15,.45)}
   </form>
 </dialog>
 
+<dialog id="dlgLink">
+  <div class="dlg-head"><h3>Link para envio de atestado</h3><button type="button" class="x" onclick="this.closest('dialog').close()" aria-label="Fechar">×</button></div>
+  <div class="lk">
+    <p>Compartilhe com os colaboradores. Eles entram com CPF e matrícula, anexam a foto do atestado e o envio aparece aqui para você conferir.</p>
+    <div class="lk-row"><input id="lkUrl" readonly aria-label="Link de envio"><button class="btn pri" type="button" id="lkCopiar">Copiar</button></div>
+    <div id="lkQr" class="lk-qr"></div>
+    <p class="lk-dica">Dica: imprima o QR Code e cole no mural do setor.</p>
+  </div>
+</dialog>
+
 <script>
-/* =========================================================
-   CONFIGURAÇÃO — cole aqui os dados do seu projeto Supabase
-   (Project Settings > API). Deixe vazio para usar o modo local,
-   que guarda tudo só neste navegador.
-   ========================================================= */
-const SUPABASE_URL = "https://snkkneomtcgnmgsqgtvk.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNua2tuZW9tdGNnbm1nc3FndHZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzM5MjEsImV4cCI6MjEwNjk0OTkyMX0.4gCEc_z6432530Yx8jKj69x6s7C46Cd88dZ9z1lbdms";
+/* Os dados do Supabase ficam no arquivo config.js (mesma pasta).
+   Assim este index.html pode ser substituído sem perder a configuração. */
+const CFG = window.SGI_CONFIG || {};
+const SUPABASE_URL = CFG.SUPABASE_URL || "https://snkkneomtcgnmgsqgtvk.supabase.co";
+const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNua2tuZW9tdGNnbm1nc3FndHZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzM5MjEsImV4cCI6MjEwNjk0OTkyMX0.4gCEc_z6432530Yx8jKj69x6s7C46Cd88dZ9z1lbdms";
+const BUCKET = "sgi-atestados";
 
 /* ---------- utilidades ---------- */
 const $ = s => document.querySelector(s);
@@ -334,7 +363,7 @@ const MOD = {
       ["Tipo", r => `<span class="tag t-${esc(r.tipo)}">${TIPOS[r.tipo] || esc(r.tipo)}</span>`],
       ["Período", r => `${fmtD(r.data_inicio)} a ${fmtD(r.data_fim)}`],
       ["Dias", r => r.dias ?? "", "num"],
-      ["Documento", r => r.documento_entregue ? "Entregue" : `<span class="s warn">Pendente</span>`],
+      ["Documento", r => (r.documento_entregue ? "Entregue" : `<span class="s warn">Pendente</span>`) + (r.arquivo_path ? `<small>Com anexo digital</small>` : "")],
       ["Situação", sitTag]
     ],
     calc: r => { r.dias = contaDias(r.data_inicio, r.data_fim); },
@@ -420,13 +449,14 @@ const store = {
   async save(t,row){
     const { id, created_at, ...r } = row;
     if (!sb){
-      const all = lsGet(t);
+      const all = lsGet(t), novo = id || crypto.randomUUID();
       if (id){ const i = all.findIndex(x => x.id === id); all[i] = { ...all[i], ...r }; }
-      else all.unshift({ ...r, id: crypto.randomUUID(), created_at: new Date().toISOString() });
-      return lsSet(t, all);
+      else all.unshift({ ...r, id: novo, created_at: new Date().toISOString() });
+      lsSet(t, all); return novo;
     }
-    const { error } = id ? await sb.from(tb(t)).update(r).eq("id", id) : await sb.from(tb(t)).insert(r);
-    if (error) throw error;
+    if (id){ const { error } = await sb.from(tb(t)).update(r).eq("id", id); if (error) throw error; return id; }
+    const { data:ins, error } = await sb.from(tb(t)).insert(r).select("id").single();
+    if (error) throw error; return ins.id;
   },
   async remove(t,id){
     if (!sb) return lsSet(t, lsGet(t).filter(x => x.id !== id));
@@ -436,7 +466,7 @@ const store = {
 };
 
 /* ---------- estado ---------- */
-const data = { colaboradores:[], atestados:[], custos:[], ferias:[] };
+const data = { colaboradores:[], atestados:[], custos:[], ferias:[], envios:[] };
 const filtros = { colaboradores:{}, atestados:{}, custos:{}, ferias:{} };
 let view = "painel";
 let editando = null; // { mod, row }
@@ -450,6 +480,11 @@ async function carregar(){
     if (r.status === "fulfilled") data[tabelas[i]] = r.value || [];
     else { falhas[tabelas[i]] = r.reason?.message || String(r.reason); console.error("Falha ao ler", tb(tabelas[i]), r.reason); }
   });
+  data.envios = [];
+  if (sb){
+    const { data:env, error } = await sb.from(tb("atestados_envios")).select("*").eq("status","pendente").order("created_at");
+    if (error){ falhas.atestados_envios = error.message; console.error(error); } else data.envios = env || [];
+  }
   const nomes = Object.keys(falhas);
   if (nomes.length) toast(`Não foi possível ler: ${nomes.map(tb).join(", ")}. ${Object.values(falhas)[0]}`, true);
   render();
@@ -457,7 +492,7 @@ async function carregar(){
 
 // explica por que a lista de colaboradores está vazia
 function motivoSemColaboradores(){
-  if (!sb) return "O sistema não está conectado ao Supabase. Preencha SUPABASE_URL e SUPABASE_ANON_KEY no topo do index.html e publique de novo.";
+  if (!sb) return "O sistema não está conectado ao Supabase. Preencha SUPABASE_URL e SUPABASE_ANON_KEY no arquivo config.js e publique de novo.";
   if (falhas.colaboradores) return `Erro ao ler a tabela ${tb("colaboradores")}: ${falhas.colaboradores}. Rode o schema.sql no Supabase.`;
   if (!data.colaboradores.length) return `A tabela ${tb("colaboradores")} está vazia. Rode o colaboradores_carga.sql no Supabase ou cadastre em Colaboradores.`;
   if (!ativos().length) return "Nenhum colaborador está marcado como ativo.";
@@ -467,6 +502,9 @@ function motivoSemColaboradores(){
 /* ---------- renderização ---------- */
 function render(){
   document.querySelectorAll("#nav button").forEach(b => b.setAttribute("aria-current", b.dataset.view === view ? "page" : "false"));
+  const navAt = document.querySelector('#nav [data-view="atestados"]');
+  navAt.querySelector(".badge")?.remove();
+  if (data.envios.length) navAt.insertAdjacentHTML("beforeend", `<b class="badge" aria-label="${data.envios.length} aguardando conferência">${data.envios.length}</b>`);
   view === "painel" ? renderPainel() : renderModulo(view);
 }
 
@@ -503,6 +541,7 @@ function renderPainel(){
   const docPend = data.atestados.filter(r => !r.documento_entregue);
 
   $("#main").innerHTML = `
+    ${data.envios.length ? `<div class="pend-aviso"><span><b>${data.envios.length}</b> atestado(s) enviado(s) pelos colaboradores aguardando conferência.</span><button class="btn pri" data-ir="atestados">Conferir agora</button></div>` : ""}
     <section class="fora" aria-labelledby="foraT">
       <div class="fora-head"><strong>${fora.length}</strong><h3 id="foraT" style="margin:0">${fora.length === 1 ? "pessoa fora hoje" : "pessoas fora hoje"}</h3>${ativos().length ? `<span style="color:var(--muted);font-size:14px">${ativos().length} colaboradores ativos no time</span>` : ""}</div>
       ${fora.length ? `<div class="fora-list">${fora.map(r => `
@@ -537,7 +576,9 @@ const opcoes = (opts, label, sel) => `<option value="">${label}</option>` + Obje
 function renderModulo(nome){
   const m = MOD[nome], f = filtros[nome];
   $("#main").innerHTML = `
-    <h2>${m.titulo}</h2><p class="sub">${m.desc}</p>
+    <div class="tit"><div><h2>${m.titulo}</h2><p class="sub">${m.desc}</p></div>
+      ${nome === "atestados" ? `<button class="btn" id="linkEnvio">Link de envio para colaboradores</button>` : ""}</div>
+    ${nome === "atestados" ? painelPendentes() : ""}
     <div class="toolbar">
       <input class="busca" type="search" placeholder="Buscar" aria-label="Buscar" value="${esc(f.q || "")}" data-f="q">
       <select aria-label="${m.filtro.label}" data-f="cat">${opcoes(m.filtro.opts, m.filtro.label, f.cat)}</select>
@@ -556,7 +597,76 @@ function renderModulo(nome){
   $("#main").querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", () => { f[el.dataset.f] = el.value; desenharLinhas(nome); }));
   $("#novo").onclick = () => abrirForm(nome);
   $("#csv").onclick = () => exportarCSV(nome);
+  if ($("#linkEnvio")) $("#linkEnvio").onclick = abrirLinkEnvio;
 }
+
+/* ---------- atestados enviados pelos colaboradores ---------- */
+function painelPendentes(){
+  if (!data.envios.length) return "";
+  return `<section class="pend" aria-labelledby="pendT">
+    <h3 id="pendT">Aguardando conferência <span class="s warn">${data.envios.length}</span></h3>
+    <div class="pend-list">${data.envios.map(e => `
+      <article class="pend-card">
+        <div><b>${esc(e.colaborador)}</b><small>Matrícula ${esc(e.matricula || "—")}</small></div>
+        <div><span class="tag t-${esc(e.tipo)}">${TIPOS[e.tipo] || esc(e.tipo)}</span>
+          <small>${fmtD(e.data_inicio)} a ${fmtD(e.data_fim)}, ${contaDias(e.data_inicio, e.data_fim)} dia(s)</small></div>
+        <small>Enviado em ${new Date(e.created_at).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}</small>
+        ${e.observacao ? `<p class="pend-obs">${esc(e.observacao)}</p>` : ""}
+        <div class="pend-acoes">
+          <button class="btn" data-doc="${esc(e.arquivo_path)}">Ver documento</button>
+          <button class="btn pri" data-aprovar="${esc(e.id)}">Conferir e lançar</button>
+          <button class="btn del" data-recusar="${esc(e.id)}">Recusar</button>
+        </div>
+      </article>`).join("")}</div>
+  </section>`;
+}
+
+async function abrirDoc(path){
+  if (!sb || !path) return;
+  const w = window.open("", "_blank");
+  const { data:url, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 300);
+  if (error){ w && w.close(); return toast("Não foi possível abrir o documento: " + error.message, true); }
+  if (w) w.location = url.signedUrl; else location.href = url.signedUrl;
+}
+
+function aprovarEnvio(id){
+  const e = data.envios.find(x => x.id === id); if (!e) return;
+  abrirForm("atestados", {
+    colaborador: e.colaborador, matricula: e.matricula, tipo: e.tipo,
+    data_inicio: e.data_inicio, data_fim: e.data_fim, observacao: e.observacao,
+    arquivo_path: e.arquivo_path, documento_entregue: false, cat_emitida: false
+  }, e);
+}
+
+async function recusarEnvio(id){
+  const e = data.envios.find(x => x.id === id); if (!e) return;
+  const motivo = prompt(`Recusar o atestado enviado por ${e.colaborador}?\nInforme o motivo (opcional):`, "");
+  if (motivo === null) return;
+  const { data:{ user } } = await sb.auth.getUser();
+  const { error } = await sb.from(tb("atestados_envios")).update({ status:"recusado", motivo_recusa: motivo || null, conferido_em: new Date().toISOString(), conferido_por: user?.email || null }).eq("id", id);
+  if (error) return toast("Não foi possível recusar: " + error.message, true);
+  toast("Envio recusado."); carregar();
+}
+
+function abrirLinkEnvio(){
+  if (!sb) return toast("O link funciona depois que o sistema estiver conectado ao Supabase (config.js).", true);
+  const link = new URL("enviar.html", location.href).href;
+  $("#lkUrl").value = link;
+  $("#lkQr").innerHTML = "";
+  if (window.QRCode) new QRCode($("#lkQr"), { text: link, width: 200, height: 200, colorDark: "#1D5A3F", colorLight: "#FFFFFF" });
+  else $("#lkQr").textContent = "QR Code indisponível no momento. Use o link acima.";
+  $("#dlgLink").showModal();
+}
+
+document.addEventListener("click", ev => {
+  const t = ev.target.closest("[data-doc],[data-aprovar],[data-recusar],[data-ir]");
+  if (!t) return;
+  ev.stopPropagation();
+  if (t.dataset.doc !== undefined) abrirDoc(t.dataset.doc);
+  else if (t.dataset.aprovar) aprovarEnvio(t.dataset.aprovar);
+  else if (t.dataset.recusar) recusarEnvio(t.dataset.recusar);
+  else if (t.dataset.ir){ view = t.dataset.ir; render(); }
+});
 
 function desenharLinhas(nome){
   const m = MOD[nome], rows = filtrar(nome);
@@ -571,10 +681,11 @@ function desenharLinhas(nome){
 }
 
 /* ---------- formulário ---------- */
-function abrirForm(nome, row){
+function abrirForm(nome, row, envio){
   const m = MOD[nome]; row = row || {};
-  editando = { nome, row };
-  $("#dlgTitle").textContent = (row.id ? "Editar " : "Novo ") + m.nome;
+  editando = { nome, row, envio };
+  $("#dlgSalvar").textContent = envio ? "Lançar atestado" : "Salvar";
+  $("#dlgTitle").textContent = envio ? "Conferir atestado enviado" : (row.id ? "Editar " : "Novo ") + m.nome;
   $("#dlgDel").hidden = !row.id;
   $("#fields").innerHTML = m.fields.map(fd => {
     const v = row[fd.k] ?? (fd.k === "status" ? Object.keys(fd.opts)[0] : "");
@@ -615,12 +726,14 @@ function abrirForm(nome, row){
     }
   };
   form.oninput = atualizarDica; atualizarDica();
+  if (nome === "atestados" && row.arquivo_path)
+    $("#fields").insertAdjacentHTML("afterbegin", `<div class="f full"><button type="button" class="btn" data-doc="${esc(row.arquivo_path)}">Ver documento anexado</button></div>`);
   $("#dlg").showModal();
 }
 
 $("#form").addEventListener("submit", async e => {
   e.preventDefault();
-  const { nome, row } = editando, m = MOD[nome], form = e.target;
+  const { nome, row, envio } = editando, m = MOD[nome], form = e.target;
   const r = { ...row };
   m.fields.forEach(fd => {
     if (fd.type === "hint") return;
@@ -633,8 +746,13 @@ $("#form").addEventListener("submit", async e => {
   const erro = m.valida && m.valida(r);
   if (erro) return toast(erro, true);
   try {
-    await store.save(nome, r);
-    $("#dlg").close(); toast(row.id ? "Alterações salvas." : "Registro salvo.");
+    const novoId = await store.save(nome, r);
+    if (envio){
+      const { data:{ user } } = await sb.auth.getUser();
+      const { error } = await sb.from(tb("atestados_envios")).update({ status:"aprovado", atestado_id: novoId, conferido_em: new Date().toISOString(), conferido_por: user?.email || null }).eq("id", envio.id);
+      if (error) toast("Atestado lançado, mas não consegui marcar o envio como conferido: " + error.message, true);
+    }
+    $("#dlg").close(); toast(envio ? "Atestado conferido e lançado." : row.id ? "Alterações salvas." : "Registro salvo.");
     await carregar();
   } catch (err) { toast("Não foi possível salvar: " + (err.message || err), true); }
 });
@@ -647,6 +765,10 @@ $("#dlgDel").onclick = async () => {
   if (!confirm(msg)) return;
   try { await store.remove(nome, row.id); $("#dlg").close(); toast("Registro excluído."); await carregar(); }
   catch (err) { toast("Não foi possível excluir: " + (err.message || err), true); }
+};
+$("#lkCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("#lkUrl").value); toast("Link copiado."); }
+  catch { $("#lkUrl").select(); toast("Selecionei o link: use Ctrl+C para copiar."); }
 };
 $("#dlgClose").onclick = $("#dlgCancel").onclick = () => $("#dlg").close();
 
