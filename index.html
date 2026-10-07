@@ -293,7 +293,8 @@ const MOD = {
       {k:"observacao",label:"Observação",type:"area"}
     ],
     cols:[
-      ["Colaborador", r => `<strong>${esc(r.nome)}</strong><small>${esc(r.funcao || "")}</small>`],
+      ["Colaborador", r => `<strong>${esc(r.nome)}</strong>`],
+      ["Função", r => esc(r.funcao || "—")],
       ["Matrícula", r => esc(r.matricula || "—"), "nw"],
       ["CPF", r => cpfOculto(r.cpf), "nw"],
       ["E-mail", r => esc(r.email || "—")],
