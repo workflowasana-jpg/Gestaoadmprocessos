@@ -19,6 +19,7 @@
   --red:#A5302B; --red-soft:#F8E2E0;
   --c-maternidade:#9A4A77; --c-paternidade:#3B679C; --c-eleitoral:#6A58A6; --c-doenca:#A8741A; --c-acidente:#A5302B; --c-declaracao:#2F7F86;
   --radius:10px;
+  --fer-prog:#B8871F; --fer-aprov:#3B679C; --fer-gozo:#1D5A3F; --fer-conc:#8A9A90;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
@@ -28,6 +29,7 @@
     --green:#4FA47B; --green-ink:#0D1A13; --green-soft:#1E3328;
     --gold:#D5AF55; --gold-soft:#332B17; --red:#E07A72; --red-soft:#3A1F1D;
     --c-maternidade:#D88AB5; --c-paternidade:#82AEE3; --c-eleitoral:#AC9BEA; --c-doenca:#E0AE55; --c-acidente:#E07A72; --c-declaracao:#6CC3CB;
+    --fer-prog:#C99A35; --fer-aprov:#5C8BC4; --fer-gozo:#3E9A6E; --fer-conc:#5E6E65;
   }
 }
 *,*::before,*::after{box-sizing:inherit}
@@ -220,6 +222,39 @@ button.bh-card:hover{border-color:var(--green)}
 .lbl{font-weight:600}
 .periodo-info{font-size:13px;color:var(--muted)}
 .periodo-info b{color:var(--ink)}
+.gf{margin-top:20px}
+.gf-topo{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.gf-kpis{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--muted)}
+.gf-kpis b{color:var(--ink);font-size:16px}
+.gf-kpis .neg b{color:var(--red)}
+.gf-scroll{overflow-x:auto}
+.gf-grade{min-width:760px}
+.gf-linha{display:grid;grid-template-columns:240px 1fr;align-items:center;min-height:46px;border-bottom:1px solid var(--line)}
+.gf-cab{min-height:28px;border-bottom:1px solid var(--line)}
+.gf-nome{display:grid;gap:3px;padding:6px 12px 6px 0;font-size:13px;justify-items:start}
+.gf-nome b{font-weight:600;line-height:1.25}
+.gf-nome small{color:var(--muted)}
+.gf-nome .s{font-size:11px;padding:1px 8px}
+.gf-trilha{position:relative;height:100%;min-height:28px}
+.gf-meses span{position:absolute;top:6px;font-size:12px;color:var(--muted);padding-left:4px;text-transform:capitalize;white-space:nowrap}
+.gf-corpo{position:relative}
+.gf-fundo{position:absolute;inset:0;display:grid;grid-template-columns:240px 1fr;pointer-events:none}
+.gf-fundo-trilha{position:relative}
+.gf-fundo-trilha > i{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.gf-destaque{position:absolute;top:0;bottom:0;background:var(--gold-soft);opacity:.7}
+.gf-hoje{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:2}
+.gf-hoje-rot{position:absolute;bottom:-1px;transform:translateX(-50%);font-size:10px;font-weight:700;color:#fff;background:var(--red);border-radius:4px 4px 0 0;padding:1px 6px;z-index:3}
+.gf-corpo .gf-linha{position:relative;z-index:1}
+.gf-corpo .gf-linha:last-child{border-bottom:0}
+.gf-barra{position:absolute;top:50%;transform:translateY(-50%);height:24px;border:0;border-radius:6px;cursor:pointer;color:#fff;font-size:11px;font-weight:700;overflow:hidden;padding:0 6px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.gf-barra:hover{filter:brightness(1.1)}
+.gf-barra span{white-space:nowrap}
+.gf-limite{position:absolute;top:50%;width:12px;height:12px;background:var(--red);transform:translate(-50%,-50%) rotate(45deg);border:2px solid var(--surface);z-index:2}
+.gf-legenda{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;font-size:13px;color:var(--muted)}
+.gf-legenda span{display:inline-flex;align-items:center;gap:6px}
+.gf-legenda i{width:14px;height:10px;border-radius:3px;display:inline-block}
+.gf-legenda i.gf-leg-limite{width:10px;height:10px;background:var(--red);transform:rotate(45deg);border-radius:0}
+.gf-legenda i.gf-leg-dest{background:var(--gold-soft);border:1px solid var(--gold)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-size:14px;z-index:99;max-width:calc(100% - 32px)}
 .toast.err{background:var(--red);color:#fff}
 @media (prefers-reduced-motion:no-preference){dialog[open]{animation:pop .16s ease-out}@keyframes pop{from{opacity:0;transform:translateY(8px)}}}
@@ -596,6 +631,84 @@ function barras(obj, total, fmt){
   ).join("") + `<div class="total"><span>Total</span><span>${fmt(total)}</span></div>`;
 }
 
+/* ---------- gráfico de acompanhamento de férias ---------- */
+const COR_FER = { programada:"var(--fer-prog)", aprovada:"var(--fer-aprov)", em_gozo:"var(--fer-gozo)", concluida:"var(--fer-conc)" };
+function saldoFeriasColab(c){
+  if (!c.data_admissao) return { txt:"Sem data de admissão", cls:"off" };
+  const per = periodosAquisitivos(c.data_admissao).map(p => ({ ...p, usados: diasUsadosPeriodo(c.nome, p.ini) }));
+  const aberto = per.find(p => p.fim < HOJE && p.limite >= HOJE && p.usados < 30);
+  if (aberto){
+    const resta = 30 - aberto.usados, urg = aberto.limite <= addDias(HOJE, 60);
+    return { txt:`${resta} dia(s) até ${fmtD(aberto.limite)}`, cls: urg ? "bad" : "", limite: aberto.limite };
+  }
+  const atual = per.find(p => p.fim >= HOJE);
+  return atual ? { txt:`Período completa em ${fmtD(atual.fim)}`, cls:"off" } : { txt:"Em dia", cls:"" };
+}
+function graficoFerias(P){
+  // escala: o período escolhido, ou o ano inteiro quando o período for curto (mês)
+  let ini = P.ini, fim = P.fim;
+  if (contaDias(ini, fim) < 60){ ini = P.ini.slice(0,4) + "-01-01"; fim = P.ini.slice(0,4) + "-12-31"; }
+  const total = contaDias(ini, fim);
+  const pos = d => Math.max(0, Math.min(100, (contaDias(ini, d) - 1) / total * 100));
+  const larg = (a,b) => { const x = a < ini ? ini : a, y = b > fim ? fim : b; return x > y ? 0 : contaDias(x, y) / total * 100; };
+
+  // marcas de mês
+  const meses = [];
+  for (let m = ini.slice(0,7) + "-01"; m <= fim; m = addMeses(m, 1)){
+    const a = m < ini ? ini : m;
+    meses.push({ left: pos(a), rot: parseD(m).toLocaleDateString("pt-BR", { month:"short" }).replace(".", "") + (m.slice(5,7) === "01" || meses.length === 0 ? " " + m.slice(2,4) : "") });
+  }
+  const destaque = (P.ini !== ini || P.fim !== fim) ? `<div class="gf-destaque" style="left:${pos(P.ini)}%;width:${larg(P.ini, P.fim)}%"></div>` : "";
+  const temHoje = HOJE >= ini && HOJE <= fim;
+  const hoje = temHoje ? `<div class="gf-hoje" style="left:${pos(HOJE)}%"></div>` : "";
+
+  const pessoas = ativos();
+  const nomes = new Set(pessoas.map(c => c.nome));
+  data.ferias.forEach(f => { if (!nomes.has(f.colaborador) && sobreposicao(f.data_inicio, f.data_fim, ini, fim)) { nomes.add(f.colaborador); pessoas.push({ nome:f.colaborador }); } });
+
+  const emFerias = data.ferias.filter(f => situacao(f) === "em_curso").length;
+  const prox60 = data.ferias.filter(f => f.data_inicio > HOJE && f.data_inicio <= addDias(HOJE, 60)).length;
+  const saldos = pessoas.map(c => ({ c, s: saldoFeriasColab(c) }));
+  const vencendo = saldos.filter(x => x.s.cls === "bad").length;
+  const risco = data.ferias.filter(feriasEmRisco).length;
+
+  const linhas = saldos.map(({ c, s }) => {
+    const barras = data.ferias.filter(f => f.colaborador === c.nome && sobreposicao(f.data_inicio, f.data_fim, ini, fim) > 0).map(f => {
+      const tit = `${c.nome}: ${fmtD(f.data_inicio)} a ${fmtD(f.data_fim)}, ${f.dias} dia(s)${f.abono ? " + abono" : ""} (${ST_FER[f.status] || f.status})`;
+      return `<button class="gf-barra" data-fer="${esc(f.id)}" title="${esc(tit)}" aria-label="${esc(tit)}" style="left:${pos(f.data_inicio < ini ? ini : f.data_inicio)}%;width:max(${larg(f.data_inicio, f.data_fim)}%,6px);background:${COR_FER[f.status] || "var(--fer-prog)"}"><span>${f.dias}d</span></button>`;
+    }).join("");
+    const limite = s.limite && s.limite >= ini && s.limite <= fim ? `<i class="gf-limite" style="left:${pos(s.limite)}%" title="Prazo para tirar férias: ${fmtD(s.limite)}"></i>` : "";
+    return `<div class="gf-linha">
+      <div class="gf-nome"><b>${esc(c.nome)}</b><span class="s ${s.cls}">${esc(s.txt)}</span></div>
+      <div class="gf-trilha">${barras}${limite}</div></div>`;
+  }).join("");
+
+  return `<section class="box gf" aria-labelledby="gfT">
+    <div class="gf-topo">
+      <h3 id="gfT" style="margin:0">Acompanhamento de férias</h3>
+      <div class="gf-kpis">
+        <span><b>${emFerias}</b> de férias hoje</span>
+        <span><b>${prox60}</b> saída(s) nos próximos 60 dias</span>
+        <span class="${vencendo ? "neg" : ""}"><b>${vencendo}</b> com prazo vencendo</span>
+      </div>
+    </div>
+    ${pessoas.length ? `<div class="gf-scroll"><div class="gf-grade">
+      <div class="gf-linha gf-cab"><div class="gf-nome"><small>Colaborador e saldo do período em aberto</small></div>
+        <div class="gf-trilha gf-meses">${meses.map(m => `<span style="left:${m.left}%">${m.rot}</span>`).join("")}${temHoje ? `<b class="gf-hoje-rot" style="left:${pos(HOJE)}%">Hoje</b>` : ""}</div></div>
+      <div class="gf-corpo">
+        <div class="gf-fundo"><div></div><div class="gf-fundo-trilha">${meses.map(m => `<i style="left:${m.left}%"></i>`).join("")}${destaque}${hoje}</div></div>
+        ${linhas}
+      </div>
+    </div></div>` : `<p class="vazio">Cadastre colaboradores para acompanhar as férias.</p>`}
+    <div class="gf-legenda">
+      ${Object.entries(ST_FER).map(([k,l]) => `<span><i style="background:${COR_FER[k]}"></i>${l}</span>`).join("")}
+      <span><i class="gf-leg-limite"></i>Prazo para tirar férias</span>
+      ${P.ini !== ini || P.fim !== fim ? `<span><i class="gf-leg-dest"></i>Período do filtro</span>` : ""}
+    </div>
+    ${risco ? `<div class="alerta">${risco} férias lançadas terminam depois do prazo concessivo ou ainda não foram programadas perto do vencimento (risco de pagamento em dobro).</div>` : ""}
+  </section>`;
+}
+
 /* filtro de período do painel */
 const painelF = { modo:"mes", mes: HOJE.slice(0,7), ano: HOJE.slice(0,4), de: HOJE.slice(0,8) + "01", ate: HOJE };
 function periodoPainel(){
@@ -635,7 +748,6 @@ function renderPainel(){
   const pago = soma(custPer.filter(r => r.status === "pago"), "valor");
 
   // férias que tocam o período
-  const ferPer = data.ferias.filter(r => sobreposicao(r.data_inicio, r.data_fim, P.ini, P.fim) > 0).sort((a,b) => a.data_inicio.localeCompare(b.data_inicio));
   const risco = data.ferias.filter(feriasEmRisco);
 
   // banco de horas: saldo no último relatório até o fim do período + variação dos relatórios do período
@@ -681,12 +793,10 @@ function renderPainel(){
           <p class="vazio" style="margin-top:10px">Saldo pelo último relatório importado até ${fmtD(P.fim)}.</p>
           ${bhLista.some(x => x.ultimo.saldo_atual_min < 0) ? `<div class="alerta">Há colaborador com saldo negativo.</div>` : ""}`
         : `<p class="vazio">Nenhum relatório importado até ${fmtD(P.fim)}.</p>`}</section>` : ""}
-      <section class="box"><h3>Férias no período</h3>
-        ${ferPer.length ? `<ul class="mini">${ferPer.map(r => `<li><span>${esc(r.colaborador)}</span><span class="nw">${fmtD(r.data_inicio)} a ${fmtD(r.data_fim)}</span></li>`).join("")}</ul>` : `<p class="vazio">Ninguém de férias no período.</p>`}
-        ${risco.length ? `<div class="alerta">${risco.length} férias com prazo concessivo vencendo ou ultrapassado (risco de pagamento em dobro).</div>` : ""}
-      </section>
-    </div>`;
+    </div>
+    ${graficoFerias(P)}`;
 
+  $("#main").querySelectorAll("[data-fer]").forEach(el => el.onclick = () => { const r = data.ferias.find(x => String(x.id) === el.dataset.fer); if (r) abrirForm("ferias", r); });
   $("#main").querySelectorAll("[data-modo]").forEach(bt => bt.onclick = () => { painelF.modo = bt.dataset.modo; renderPainel(); });
   const liga = (id, k) => { const el = $(id); if (el) el.onchange = () => { if (el.value) painelF[k] = el.value; renderPainel(); }; };
   liga("#pfMes","mes"); liga("#pfAno","ano"); liga("#pfDe","de"); liga("#pfAte","ate");
