@@ -26,7 +26,7 @@ create table if not exists public.sgi_atestados (
   created_at         timestamptz not null default now(),
   colaborador        text not null,
   matricula          text,
-  tipo               text not null check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao')),
+  tipo               text not null check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito')),
   cid                text,
   data_inicio        date not null,
   data_fim           date not null,
@@ -116,7 +116,7 @@ create table if not exists public.sgi_atestados_envios (
   colaborador_id uuid references public.sgi_colaboradores(id) on delete set null,
   colaborador    text not null,
   matricula      text,
-  tipo           text not null check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao')),
+  tipo           text not null check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito')),
   data_inicio    date not null,
   data_fim       date not null,
   observacao     text,
@@ -173,7 +173,7 @@ begin
   limit 1;
   if not found then raise exception 'Colaborador não encontrado. Confira o CPF e a matrícula.'; end if;
 
-  if p_tipo not in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao') then raise exception 'Tipo de atestado inválido.'; end if;
+  if p_tipo not in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito') then raise exception 'Tipo de atestado inválido.'; end if;
   if p_inicio is null or p_fim is null or p_fim < p_inicio then raise exception 'Confira as datas: o fim não pode ser antes do início.'; end if;
   if p_fim - p_inicio > 200 then raise exception 'Período muito longo. Confira as datas.'; end if;
   if p_inicio < current_date - 120 then raise exception 'A data de início é muito antiga. Fale com a supervisão.'; end if;
@@ -242,9 +242,9 @@ begin
 end $$;
 
 alter table public.sgi_atestados add constraint sgi_atestados_tipo_check
-  check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao'));
+  check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito'));
 alter table public.sgi_atestados_envios add constraint sgi_envios_tipo_check
-  check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao'));
+  check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito'));
 
 -- =====================================================================
 -- BANCO DE HORAS (importado do Relatório de Ponto em PDF)
@@ -318,3 +318,27 @@ end $$;
 
 alter table public.sgi_custos add constraint sgi_custos_categoria_check
   check (categoria in ('inventario','projeto','auditoria','endomarketing'));
+
+-- =====================================================================
+-- NOVOS TIPOS: CASAMENTO E ÓBITO
+-- =====================================================================
+do $$
+declare r record;
+begin
+  for r in
+    select rel.relname, con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    where rel.relnamespace = 'public'::regnamespace
+      and rel.relname in ('sgi_atestados', 'sgi_atestados_envios')
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%tipo%'
+  loop
+    execute format('alter table public.%I drop constraint %I', r.relname, r.conname);
+  end loop;
+end $$;
+
+alter table public.sgi_atestados add constraint sgi_atestados_tipo_check
+  check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito'));
+alter table public.sgi_atestados_envios add constraint sgi_envios_tipo_check
+  check (tipo in ('maternidade','paternidade','eleitoral','doenca','acidente','declaracao','casamento','obito'));

@@ -17,7 +17,7 @@
   --green:#1D5A3F; --green-ink:#FFFFFF; --green-soft:#E3EFE8;
   --gold:#A9822A; --gold-soft:#F4ECD6;
   --red:#A5302B; --red-soft:#F8E2E0;
-  --c-maternidade:#9A4A77; --c-paternidade:#3B679C; --c-eleitoral:#6A58A6; --c-doenca:#A8741A; --c-acidente:#A5302B; --c-declaracao:#2F7F86;
+  --c-maternidade:#9A4A77; --c-paternidade:#3B679C; --c-eleitoral:#6A58A6; --c-doenca:#A8741A; --c-acidente:#A5302B; --c-declaracao:#2F7F86; --c-casamento:#C2589A; --c-obito:#4A4F57;
   --radius:10px;
   --fer-prog:#B8871F; --fer-aprov:#3B679C; --fer-gozo:#1D5A3F; --fer-conc:#8A9A90;
   box-sizing:border-box;
@@ -28,7 +28,7 @@
     --paper:#101814; --surface:#18221D; --ink:#E4EBE6; --muted:#97A89E; --line:#2A3830;
     --green:#4FA47B; --green-ink:#0D1A13; --green-soft:#1E3328;
     --gold:#D5AF55; --gold-soft:#332B17; --red:#E07A72; --red-soft:#3A1F1D;
-    --c-maternidade:#D88AB5; --c-paternidade:#82AEE3; --c-eleitoral:#AC9BEA; --c-doenca:#E0AE55; --c-acidente:#E07A72; --c-declaracao:#6CC3CB;
+    --c-maternidade:#D88AB5; --c-paternidade:#82AEE3; --c-eleitoral:#AC9BEA; --c-doenca:#E0AE55; --c-acidente:#E07A72; --c-declaracao:#6CC3CB; --c-casamento:#E58BC2; --c-obito:#A9B0BA;
     --fer-prog:#C99A35; --fer-aprov:#5C8BC4; --fer-gozo:#3E9A6E; --fer-conc:#5E6E65;
   }
 }
@@ -124,7 +124,7 @@ td small{display:block;color:var(--muted)}
 .foot b{color:var(--ink)}
 .tag{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--dot,var(--muted))}
-.t-maternidade{--dot:var(--c-maternidade)} .t-paternidade{--dot:var(--c-paternidade)} .t-eleitoral{--dot:var(--c-eleitoral)} .t-declaracao{--dot:var(--c-declaracao)}
+.t-maternidade{--dot:var(--c-maternidade)} .t-paternidade{--dot:var(--c-paternidade)} .t-eleitoral{--dot:var(--c-eleitoral)} .t-declaracao{--dot:var(--c-declaracao)} .t-casamento{--dot:var(--c-casamento)} .t-obito{--dot:var(--c-obito)}
 .t-doenca{--dot:var(--c-doenca)} .t-acidente{--dot:var(--c-acidente)}
 .s{font-size:12px;font-weight:600;border-radius:99px;padding:2px 9px;white-space:nowrap;background:var(--green-soft);color:var(--green)}
 .s.warn{background:var(--gold-soft);color:var(--gold)}
@@ -352,8 +352,10 @@ function toast(msg, erro=false){
 }
 
 /* ---------- dicionários ---------- */
-const TIPOS = { maternidade:"Licença maternidade", paternidade:"Licença paternidade", eleitoral:"Eleitoral", doenca:"Doença", acidente:"Acidente", declaracao:"Declaração" };
+const TIPOS = { maternidade:"Licença maternidade", paternidade:"Licença paternidade", eleitoral:"Eleitoral", doenca:"Doença", acidente:"Acidente", declaracao:"Declaração", casamento:"Casamento", obito:"Óbito" };
 const SUGESTAO = {
+  casamento:[3,"Licença casamento (gala): até 3 dias consecutivos, sem desconto (CLT art. 473). Peça a certidão de casamento."],
+  obito:[2,"Licença óbito (nojo): até 2 dias consecutivos por falecimento de cônjuge, pais, filhos, irmãos ou dependente (CLT art. 473). Peça a certidão de óbito."],
   declaracao:[1,"Declaração de comparecimento: normalmente 1 dia ou parte dele. Use a observação para anotar o horário."],
   maternidade:[120,"Sugestão: 120 dias (180 se a empresa for Empresa Cidadã)."],
   paternidade:[5,"Sugestão: 5 dias (20 se a empresa for Empresa Cidadã)."],
@@ -449,7 +451,7 @@ const MOD = {
     rodape: rows => `<span>${rows.length} colaborador(es)</span><span><b>${rows.filter(r => r.ativo !== false).length}</b> ativo(s)</span>`
   },
   atestados: {
-    titulo:"Atestados e licenças", desc:"Licença maternidade e paternidade, eleitoral, doença, acidente e declaração.",
+    titulo:"Atestados e licenças", desc:"Licença maternidade e paternidade, eleitoral, doença, acidente, declaração, casamento e óbito.",
     nome:"atestado", dataKey:"data_inicio", busca:["colaborador","matricula","cid"],
     filtro:{ k:"tipo", label:"Todos os tipos", opts:TIPOS },
     fields:[

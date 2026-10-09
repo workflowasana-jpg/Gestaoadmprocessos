@@ -1,0 +1,8 @@
+{
+  "name": "controle-administrativo-dtel",
+  "private": true,
+  "description": "Controle Administrativo SGI Qualidade DTEL. O site é estático; a pasta api/ envia os avisos por e-mail.",
+  "dependencies": {
+    "nodemailer": "6.9.14"
+  }
+}

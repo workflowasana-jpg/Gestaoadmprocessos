@@ -106,6 +106,8 @@ form,.done{padding:20px 24px 26px;display:grid;gap:16px}
           <option value="acidente">Acidente</option>
           <option value="declaracao">Declaração (comparecimento)</option>
           <option value="eleitoral">Eleitoral</option>
+          <option value="casamento">Casamento</option>
+          <option value="obito">Óbito (falecimento de familiar)</option>
           <option value="maternidade">Licença maternidade</option>
           <option value="paternidade">Licença paternidade</option>
         </select></div>
@@ -115,7 +117,7 @@ form,.done{padding:20px 24px 26px;display:grid;gap:16px}
       </div>
       <p class="dica" id="dias" aria-live="polite"></p>
       <div class="f">
-        <span style="font-weight:600;font-size:15px">Foto ou PDF do atestado</span>
+        <span style="font-weight:600;font-size:15px">Foto ou PDF do documento (atestado, declaração ou certidão)</span>
         <label class="arquivo" id="zona">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
           <span><b>Tirar foto ou escolher arquivo</b><br><small style="color:var(--muted)">Foto nítida, documento inteiro e legível</small></span>
@@ -158,6 +160,8 @@ const parseD = s => { const [y,m,d] = s.split("-").map(Number); return new Date(
 const contaDias = (a,b) => a && b ? Math.round((parseD(b) - parseD(a)) / 864e5) + 1 : 0;
 const DICAS = {
   declaracao: "Declaração: se foi só parte do dia, informe o horário na observação.",
+  casamento: "Casamento: até 3 dias consecutivos. Anexe a certidão de casamento.",
+  obito: "Óbito: até 2 dias consecutivos. Anexe a certidão de óbito.",
   maternidade: "Licença maternidade: normalmente 120 dias.",
   paternidade: "Licença paternidade: normalmente 5 dias.",
   acidente: "Em caso de acidente, avise a supervisão para a emissão da CAT."
