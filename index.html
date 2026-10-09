@@ -218,6 +218,8 @@ button.bh-card:hover{border-color:var(--green)}
 .anx-removido{margin:0;font-size:13px;color:var(--red)}
 .link-in{background:none;border:0;color:var(--green);text-decoration:underline;cursor:pointer;padding:0;font-weight:600}
 .lbl{font-weight:600}
+.periodo-info{font-size:13px;color:var(--muted)}
+.periodo-info b{color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-size:14px;z-index:99;max-width:calc(100% - 32px)}
 .toast.err{background:var(--red);color:#fff}
 @media (prefers-reduced-motion:no-preference){dialog[open]{animation:pop .16s ease-out}@keyframes pop{from{opacity:0;transform:translateY(8px)}}}
@@ -331,6 +333,27 @@ const ST_FER = { programada:"Programada", aprovada:"Aprovada", em_gozo:"Em gozo"
 function sitTag(r){
   const s = situacao(r);
   return s === "em_curso" ? `<span class="s">Em curso</span>` : s === "futuro" ? `<span class="s warn">Agendado</span>` : `<span class="s off">Encerrado</span>`;
+}
+/* períodos aquisitivos calculados pela data de admissão */
+function periodosAquisitivos(admissao){
+  if (!admissao) return [];
+  const lista = [];
+  for (let ini = admissao, n = 1; ini <= HOJE && n <= 60; ini = addMeses(admissao, 12 * n), n++){
+    const fim = addDias(addMeses(ini, 12), -1);
+    lista.push({ ini, fim, limite: addMeses(fim, 12) });
+  }
+  return lista;
+}
+function diasUsadosPeriodo(colaborador, ini, ignorarId){
+  return data.ferias.filter(f => f.colaborador === colaborador && f.aquisitivo_inicio === ini && f.id !== ignorarId)
+    .reduce((t,f) => t + Number(f.dias || 0) + (f.abono ? 10 : 0), 0);
+}
+function situacaoPeriodo(p, usados){
+  if (usados >= 30) return { txt:"já tirado", cls:"off" };
+  if (p.fim >= HOJE) return { txt:"em andamento", cls:"off" };
+  if (p.limite < HOJE) return { txt:"prazo encerrado", cls:"bad" };
+  if (p.limite <= addDias(HOJE, 60)) return { txt:"vence em breve", cls:"bad" };
+  return { txt:"disponível", cls:"" };
 }
 const prazoConcessivo = r => r.aquisitivo_fim ? addMeses(r.aquisitivo_fim, 12) : null;
 function feriasEmRisco(r){
@@ -455,6 +478,7 @@ const MOD = {
     fields:[
       {k:"colaborador",label:"Colaborador",type:"colab",req:1},
       {k:"matricula",label:"Matrícula",ro:1},
+      {k:"_periodo",label:"Período aquisitivo",type:"periodo"},
       {k:"aquisitivo_inicio",label:"Período aquisitivo: início",type:"date"},
       {k:"aquisitivo_fim",label:"Período aquisitivo: fim",type:"date"},
       {k:"data_inicio",label:"Saída",type:"date",req:1},
@@ -476,6 +500,11 @@ const MOD = {
     valida: r => {
       if (r.data_fim < r.data_inicio) return "O último dia não pode ser antes da saída.";
       if (r.dias > 30) return "Férias com mais de 30 dias. Confira as datas.";
+      if (r.aquisitivo_inicio){
+        const usados = diasUsadosPeriodo(r.colaborador, r.aquisitivo_inicio, r.id);
+        const pedidos = r.dias + (r.abono ? 10 : 0);
+        if (usados + pedidos > 30) return `Este período aquisitivo já tem ${usados} dia(s) lançados (abono conta 10). Sobram ${Math.max(0, 30 - usados)} dia(s).`;
+      }
       return null;
     },
     rodape: rows => `<span>${rows.length} registro(s)</span><span><b>${rows.filter(feriasEmRisco).length}</b> com prazo concessivo em risco</span>`
@@ -687,7 +716,7 @@ function renderModulo(nome){
       ${m.semMes ? "" : `<input type="month" aria-label="Filtrar por mês" value="${f.mes || ""}" data-f="mes">`}
       <span class="spacer"></span>
       <button class="btn" id="csv">Exportar planilha</button>
-      <button class="btn pri" id="novo">Novo ${m.nome}</button>
+      <button class="btn pri" id="novo">${nome === "ferias" ? "Lançar férias" : "Novo " + m.nome}</button>
     </div>
     <div class="tbl-wrap"><table>
       <thead><tr>${m.cols.map(c => `<th class="${c[2] || ""}">${c[0]}</th>`).join("")}</tr></thead>
@@ -838,13 +867,14 @@ function abrirForm(nome, row, envio){
   const m = MOD[nome]; row = row || {};
   editando = { nome, row, envio };
   $("#dlgSalvar").textContent = envio ? "Lançar atestado" : "Salvar";
-  $("#dlgTitle").textContent = envio ? "Conferir atestado enviado" : (row.id ? "Editar " : "Novo ") + m.nome;
+  $("#dlgTitle").textContent = envio ? "Conferir atestado enviado" : nome === "ferias" ? (row.id ? "Editar férias" : "Lançar férias") : (row.id ? "Editar " : "Novo ") + m.nome;
   $("#dlgDel").hidden = !row.id;
   $("#fields").innerHTML = m.fields.map(fd => {
     const v = row[fd.k] ?? (fd.k === "status" ? Object.keys(fd.opts)[0] : "");
     const id = "fd_" + fd.k, req = fd.req ? "required" : "";
     if (fd.type === "hint") return `<p class="hint f full" id="hint" aria-live="polite"></p>`;
     if (fd.type === "arquivo") return campoAnexo(fd, row[fd.k]);
+    if (fd.type === "periodo") return `<div class="f full"><label for="fd_periodo">${fd.label}</label><select id="fd_periodo"><option value="">Escolha o colaborador primeiro</option></select><small id="periodoInfo" class="periodo-info"></small></div>`;
     if (fd.type === "check") return `<label class="f chk"><input type="checkbox" name="${fd.k}" ${(row.id ? row[fd.k] : fd.def) ? "checked" : ""}> ${fd.label}</label>`;
     let input;
     if (fd.type === "colab"){
@@ -863,7 +893,58 @@ function abrirForm(nome, row, envio){
   // dicas e preenchimento automático
   const form = $("#form");
   if (form.elements.colaborador && form.elements.colaborador.tagName === "SELECT")
-    form.elements.colaborador.onchange = e => { const o = e.target.selectedOptions[0]; if (form.elements.matricula) form.elements.matricula.value = o?.dataset.mat || ""; };
+    form.elements.colaborador.onchange = e => {
+      const o = e.target.selectedOptions[0]; if (form.elements.matricula) form.elements.matricula.value = o?.dataset.mat || "";
+      if (nome === "ferias") montarPeriodos(true);
+    };
+  // férias: lista os períodos aquisitivos do colaborador e sugere o mais antigo em aberto
+  const montarPeriodos = sugerir => {
+    const sel = $("#fd_periodo"), info = $("#periodoInfo"); if (!sel) return;
+    const nomeC = form.elements.colaborador.value;
+    const c = data.colaboradores.find(x => x.nome === nomeC);
+    const periodos = c ? periodosAquisitivos(c.data_admissao) : [];
+    if (!nomeC){ sel.innerHTML = `<option value="">Escolha o colaborador primeiro</option>`; info.textContent = ""; return; }
+    if (!c || !c.data_admissao){
+      sel.innerHTML = `<option value="">Informar manualmente</option>`;
+      info.innerHTML = `<span class="aviso">Cadastre a data de admissão deste colaborador para o sistema calcular os períodos.</span>`; return;
+    }
+    const itens = periodos.map(p => { const u = diasUsadosPeriodo(c.nome, p.ini, row.id); return { ...p, usados:u, sit: situacaoPeriodo(p, u) }; });
+    sel.innerHTML = itens.slice().reverse().map(p =>
+      `<option value="${p.ini}">${fmtD(p.ini)} a ${fmtD(p.fim)}: ${p.sit.txt}${p.usados && p.usados < 30 ? `, ${30 - p.usados} dias restantes` : ""}</option>`).join("")
+      + `<option value="">Informar manualmente</option>`;
+    let escolhido = form.aquisitivo_inicio.value;
+    if (sugerir || !escolhido){
+      const sug = itens.find(p => p.usados < 30 && p.fim < HOJE && p.limite >= HOJE);
+      escolhido = sug ? sug.ini : "";
+      if (sugerir || !form.aquisitivo_inicio.value){
+        const p = itens.find(x => x.ini === escolhido);
+        form.aquisitivo_inicio.value = p ? p.ini : ""; form.aquisitivo_fim.value = p ? p.fim : "";
+      }
+    }
+    sel.value = itens.some(p => p.ini === escolhido) ? escolhido : "";
+    mostrarInfo();
+    function mostrarInfo(){
+      const p = itens.find(x => x.ini === sel.value);
+      if (!p){
+        const unico = itens.length === 1 && itens[0].fim >= HOJE ? itens[0] : null;
+        info.innerHTML = unico
+          ? `Ainda não completou o 1º período aquisitivo (termina em ${fmtD(unico.fim)}). Para férias antecipadas, escolha o período em andamento.`
+          : (itens.length ? "Nenhum período completo com saldo. Escolha um período na lista ou preencha as datas manualmente." : "");
+        return;
+      }
+      const resta = 30 - p.usados;
+      info.innerHTML = `Calculado pela admissão em ${fmtD(c.data_admissao)}. `
+        + (p.usados ? `Já lançados ${p.usados} dia(s) neste período, restam <b>${Math.max(resta,0)}</b>. ` : "Nenhum dia lançado neste período. ")
+        + `Férias devem terminar até <b>${fmtD(p.limite)}</b>.`
+        + (p.sit.cls === "bad" ? ` <span class="s bad">${p.sit.txt}</span>` : "");
+    }
+    sel.onchange = () => {
+      const p = itens.find(x => x.ini === sel.value);
+      if (p){ form.aquisitivo_inicio.value = p.ini; form.aquisitivo_fim.value = p.fim; }
+      mostrarInfo(); atualizarDica();
+    };
+  };
+  if (nome === "ferias") setTimeout(() => montarPeriodos(false), 0);
   if (nome === "colaboradores") form.elements.cpf.oninput = e => { e.target.value = fmtCPF(e.target.value); };
   const atualizarDica = () => {
     const h = $("#hint"); if (!h) return;
@@ -889,7 +970,7 @@ $("#form").addEventListener("submit", async e => {
   const { nome, row, envio } = editando, m = MOD[nome], form = e.target;
   const r = { ...row };
   m.fields.forEach(fd => {
-    if (fd.type === "hint" || fd.type === "arquivo") return;
+    if (fd.type === "hint" || fd.type === "arquivo" || fd.type === "periodo") return;
     const el = form.elements[fd.k];
     if (fd.type === "check") r[fd.k] = el.checked;
     else if (fd.type === "number") r[fd.k] = el.value === "" ? null : parseFloat(el.value);
@@ -1225,7 +1306,7 @@ $("#dlgClose").onclick = $("#dlgCancel").onclick = () => $("#dlg").close();
 /* ---------- exportação (abre no Excel) ---------- */
 function exportarCSV(nome){
   const m = MOD[nome], rows = filtrar(nome);
-  const campos = m.fields.filter(f => f.type !== "hint" && f.type !== "arquivo");
+  const campos = m.fields.filter(f => !["hint","arquivo","periodo"].includes(f.type));
   const extra = ["atestados","ferias"].includes(nome) ? [{ k:"dias", label:"Dias" }] : [];
   const cols = [...campos, ...extra];
   const val = (f, r) => {
