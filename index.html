@@ -201,6 +201,23 @@ button.bh-card:hover{border-color:var(--green)}
 .bh-avisos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .bh-dias tbody tr{cursor:default}
 .bh-dias tr.folga td{color:var(--muted)}
+.periodo{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px}
+.periodo-rot{font-weight:700;font-size:14px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:none;border:0;padding:7px 14px;cursor:pointer;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-checked="true"]{background:#1D5A3F;color:#fff}
+.periodo input,.periodo select{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.pf-int{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.periodo-atual{font-size:15px;display:inline-block}
+.periodo-atual::first-letter{text-transform:uppercase}
+.anexo input[type=file]{background:var(--paper);border:1px dashed var(--line);border-radius:8px;padding:10px;cursor:pointer}
+.anx-atual{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--green-soft)}
+.anx-atual span:nth-child(2){flex:1;font-weight:600}
+.anx-atual .btn{padding:5px 12px;font-size:13px}
+.anx-removido{margin:0;font-size:13px;color:var(--red)}
+.link-in{background:none;border:0;color:var(--green);text-decoration:underline;cursor:pointer;padding:0;font-weight:600}
+.lbl{font-weight:600}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-size:14px;z-index:99;max-width:calc(100% - 32px)}
 .toast.err{background:var(--red);color:#fff}
 @media (prefers-reduced-motion:no-preference){dialog[open]{animation:pop .16s ease-out}@keyframes pop{from{opacity:0;transform:translateY(8px)}}}
@@ -386,6 +403,7 @@ const MOD = {
       {k:"_hint",type:"hint"},
       {k:"documento_entregue",label:"Documento original entregue",type:"check"},
       {k:"cat_emitida",label:"CAT emitida (somente acidente)",type:"check"},
+      {k:"arquivo_path",label:"Anexo do atestado",type:"arquivo",pasta:"atestados",dica:"Foto ou PDF do atestado, até 10 MB."},
       {k:"observacao",label:"Observação",type:"area"}
     ],
     cols:[
@@ -414,12 +432,13 @@ const MOD = {
       {k:"valor",label:"Valor (R$)",type:"number",req:1},
       {k:"status",label:"Status",type:"select",opts:ST_CUSTO,req:1},
       {k:"nota_fiscal",label:"Nota fiscal"},
+      {k:"arquivo_path",label:"Anexo (nota fiscal, orçamento, comprovante)",type:"arquivo",pasta:"custos",xml:true,dica:"Foto, PDF ou XML da nota, até 10 MB."},
       {k:"observacao",label:"Observação",type:"area"}
     ],
     cols:[
       ["Data", r => fmtD(r.data)],
       ["Categoria", r => CATS[r.categoria] || esc(r.categoria)],
-      ["Descrição", r => `<strong>${esc(r.descricao)}</strong><small>${esc(r.referencia || "")}</small>`],
+      ["Descrição", r => `<strong>${esc(r.descricao)}</strong><small>${esc([r.referencia, r.arquivo_path ? "Com anexo" : ""].filter(Boolean).join(" · "))}</small>`],
       ["Fornecedor", r => esc(r.fornecedor || "—")],
       ["Status", r => `<span class="s ${r.status === "pago" ? "" : r.status === "aprovado" ? "warn" : "off"}">${ST_CUSTO[r.status] || ""}</span>`],
       ["Valor", r => brl(r.valor), "num"]
@@ -545,30 +564,56 @@ function barras(obj, total, fmt){
   ).join("") + `<div class="total"><span>Total</span><span>${fmt(total)}</span></div>`;
 }
 
+/* filtro de período do painel */
+const painelF = { modo:"mes", mes: HOJE.slice(0,7), ano: HOJE.slice(0,4), de: HOJE.slice(0,8) + "01", ate: HOJE };
+function periodoPainel(){
+  const f = painelF;
+  if (f.modo === "ano") return { ini:`${f.ano}-01-01`, fim:`${f.ano}-12-31`, rotulo:f.ano };
+  if (f.modo === "intervalo" && f.de && f.ate && f.de <= f.ate) return { ini:f.de, fim:f.ate, rotulo:`${fmtD(f.de)} a ${fmtD(f.ate)}` };
+  const mes = f.mes || HOJE.slice(0,7), ini = mes + "-01";
+  return { ini, fim: addDias(addMeses(ini, 1), -1), rotulo: parseD(ini).toLocaleDateString("pt-BR", { month:"long", year:"numeric" }) };
+}
+const sobreposicao = (a1, b1, a2, b2) => { const a = a1 > a2 ? a1 : a2, b = b1 < b2 ? b1 : b2; return a <= b ? contaDias(a, b) : 0; };
+function anosDisponiveis(){
+  const anos = new Set([HOJE.slice(0,4)]);
+  [...data.atestados, ...data.ferias].forEach(r => r.data_inicio && anos.add(r.data_inicio.slice(0,4)));
+  data.custos.forEach(r => r.data && anos.add(r.data.slice(0,4)));
+  data.banco_horas.forEach(r => r.periodo_fim && anos.add(r.periodo_fim.slice(0,4)));
+  return [...anos].sort().reverse();
+}
+
 function renderPainel(){
-  const mes = HOJE.slice(0,7), ano = HOJE.slice(0,4);
-  const nomeMes = new Date().toLocaleDateString("pt-BR", { month:"long" });
+  const P = periodoPainel(), f = painelF;
   const fora = [
     ...data.atestados.filter(r => situacao(r) === "em_curso").map(r => ({ ...r, motivo: TIPOS[r.tipo], cls:"t-" + r.tipo })),
     ...data.ferias.filter(r => situacao(r) === "em_curso").map(r => ({ ...r, motivo:"Férias", cls:"" }))
   ].sort((a,b) => a.data_fim.localeCompare(b.data_fim));
 
-  // conta só os dias que caem dentro do mês atual (inclui afastamentos que começaram antes)
-  const mIni = mes + "-01", mFim = addDias(addMeses(mIni, 1), -1);
+  // afastamentos: só os dias que caem dentro do período escolhido
   const diasPorTipo = {}; Object.values(TIPOS).forEach(t => diasPorTipo[t] = 0);
-  let totalMes = 0;
-  data.atestados.forEach(r => {
-    const a = r.data_inicio > mIni ? r.data_inicio : mIni, b = r.data_fim < mFim ? r.data_fim : mFim;
-    if (a <= b){ const d = contaDias(a, b); diasPorTipo[TIPOS[r.tipo]] += d; totalMes += d; }
-  });
+  let totalDias = 0;
+  const atPer = data.atestados.filter(r => sobreposicao(r.data_inicio, r.data_fim, P.ini, P.fim) > 0);
+  atPer.forEach(r => { const d = sobreposicao(r.data_inicio, r.data_fim, P.ini, P.fim); diasPorTipo[TIPOS[r.tipo]] += d; totalDias += d; });
+  const docPend = atPer.filter(r => !r.documento_entregue);
 
-  const custAno = data.custos.filter(r => (r.data || "").startsWith(ano));
+  // custos com data dentro do período
+  const custPer = data.custos.filter(r => r.data && r.data >= P.ini && r.data <= P.fim);
   const porCat = {}; Object.values(CATS).forEach(c => porCat[c] = 0);
-  custAno.forEach(r => porCat[CATS[r.categoria]] += Number(r.valor || 0));
+  custPer.forEach(r => porCat[CATS[r.categoria]] += Number(r.valor || 0));
+  const pago = soma(custPer.filter(r => r.status === "pago"), "valor");
 
-  const prox = data.ferias.filter(r => r.data_inicio > HOJE && r.data_inicio <= addDias(HOJE,30)).sort((a,b) => a.data_inicio.localeCompare(b.data_inicio));
+  // férias que tocam o período
+  const ferPer = data.ferias.filter(r => sobreposicao(r.data_inicio, r.data_fim, P.ini, P.fim) > 0).sort((a,b) => a.data_inicio.localeCompare(b.data_inicio));
   const risco = data.ferias.filter(feriasEmRisco);
-  const docPend = data.atestados.filter(r => !r.documento_entregue);
+
+  // banco de horas: saldo no último relatório até o fim do período + variação dos relatórios do período
+  const bh = {};
+  data.banco_horas.forEach(r => {
+    const k = soDig(r.cpf); bh[k] = bh[k] || { nome:r.colaborador, ultimo:null, variacao:0, n:0 };
+    if (r.periodo_fim <= P.fim && (!bh[k].ultimo || r.periodo_fim > bh[k].ultimo.periodo_fim)) bh[k].ultimo = r;
+    if (r.periodo_fim >= P.ini && r.periodo_fim <= P.fim){ bh[k].variacao += Number(r.saldo_periodo_min || 0); bh[k].n++; }
+  });
+  const bhLista = Object.values(bh).filter(x => x.ultimo).sort((a,b) => b.ultimo.saldo_atual_min - a.ultimo.saldo_atual_min);
 
   $("#main").innerHTML = `
     ${data.envios.length ? `<div class="pend-aviso"><span><b>${data.envios.length}</b> atestado(s) enviado(s) pelos colaboradores aguardando conferência.</span><button class="btn pri" data-ir="atestados">Conferir agora</button></div>` : ""}
@@ -578,19 +623,41 @@ function renderPainel(){
         <div class="pessoa"><b>${esc(r.colaborador)}</b><span class="tag ${r.cls}">${esc(r.motivo)}</span><small>Retorna em ${fmtD(addDias(r.data_fim,1))}</small></div>`).join("")}</div>`
       : `<p class="vazio">Todo mundo trabalhando hoje.</p>`}
     </section>
+
+    <div class="periodo" role="group" aria-label="Período do painel">
+      <span class="periodo-rot">Período</span>
+      <div class="seg" role="radiogroup">
+        ${[["mes","Mês"],["ano","Ano"],["intervalo","Intervalo"]].map(([k,l]) => `<button type="button" role="radio" aria-checked="${f.modo === k}" data-modo="${k}">${l}</button>`).join("")}
+      </div>
+      ${f.modo === "mes" ? `<input type="month" id="pfMes" value="${f.mes}" aria-label="Mês">` : ""}
+      ${f.modo === "ano" ? `<select id="pfAno" aria-label="Ano">${anosDisponiveis().map(a => `<option ${a === f.ano ? "selected" : ""}>${a}</option>`).join("")}</select>` : ""}
+      ${f.modo === "intervalo" ? `<label class="pf-int">De <input type="date" id="pfDe" value="${f.de}"></label><label class="pf-int">até <input type="date" id="pfAte" value="${f.ate}"></label>` : ""}
+      <span class="spacer"></span>
+      <b class="periodo-atual">${esc(P.rotulo)}</b>
+      ${f.modo === "intervalo" && f.de > f.ate ? `<span class="s bad">A data inicial é depois da final</span>` : ""}
+    </div>
+
     <div class="grid3">
-      <section class="box"><h3>Dias de afastamento em ${nomeMes}</h3>${barras(diasPorTipo, totalMes, v => v + " d")}
-        ${docPend.length ? `<div class="alerta">${docPend.length} atestado(s) sem documento original entregue.</div>` : ""}</section>
-      <section class="box"><h3>Custos em ${ano}</h3>${barras(porCat, soma(custAno,"valor"), brl)}</section>
-      ${data.banco_horas.length ? `<section class="box"><h3>Banco de horas</h3><ul class="mini">${saldosAtuais().filter(x => x.r).map(x =>
-        `<li><span>${esc(x.nome)}</span><span class="${x.r.saldo_atual_min < 0 ? "neg" : ""}"><b>${fmtHM(x.r.saldo_atual_min, true)}</b></span></li>`).join("")}</ul>
-        <p class="vazio" style="margin-top:10px">Conforme o último relatório importado de cada um.</p>
-        ${saldosAtuais().some(x => x.r && x.r.saldo_atual_min < 0) ? `<div class="alerta">Há colaborador com saldo negativo.</div>` : ""}</section>` : ""}
-      <section class="box"><h3>Férias nos próximos 30 dias</h3>
-        ${prox.length ? `<ul class="mini">${prox.map(r => `<li><span>${esc(r.colaborador)}</span><span>${fmtD(r.data_inicio)}, ${r.dias} d</span></li>`).join("")}</ul>` : `<p class="vazio">Nenhuma saída programada.</p>`}
+      <section class="box"><h3>Dias de afastamento</h3>${barras(diasPorTipo, totalDias, v => v + " d")}
+        <p class="vazio" style="margin-top:10px">${atPer.length} atestado(s) no período.</p>
+        ${docPend.length ? `<div class="alerta">${docPend.length} atestado(s) do período sem documento original entregue.</div>` : ""}</section>
+      <section class="box"><h3>Custos</h3>${barras(porCat, soma(custPer,"valor"), brl)}
+        <p class="vazio" style="margin-top:10px">${custPer.length} lançamento(s), ${brl(pago)} já pago.</p></section>
+      ${data.banco_horas.length ? `<section class="box"><h3>Banco de horas</h3>
+        ${bhLista.length ? `<ul class="mini">${bhLista.map(x => `<li><span>${esc(x.nome)}${x.n ? `<small style="display:block;color:var(--muted)">No período: <span class="${x.variacao < 0 ? "neg" : ""}">${fmtHM(x.variacao, true)}</span></small>` : ""}</span>
+          <span class="${x.ultimo.saldo_atual_min < 0 ? "neg" : ""}"><b>${fmtHM(x.ultimo.saldo_atual_min, true)}</b></span></li>`).join("")}</ul>
+          <p class="vazio" style="margin-top:10px">Saldo pelo último relatório importado até ${fmtD(P.fim)}.</p>
+          ${bhLista.some(x => x.ultimo.saldo_atual_min < 0) ? `<div class="alerta">Há colaborador com saldo negativo.</div>` : ""}`
+        : `<p class="vazio">Nenhum relatório importado até ${fmtD(P.fim)}.</p>`}</section>` : ""}
+      <section class="box"><h3>Férias no período</h3>
+        ${ferPer.length ? `<ul class="mini">${ferPer.map(r => `<li><span>${esc(r.colaborador)}</span><span class="nw">${fmtD(r.data_inicio)} a ${fmtD(r.data_fim)}</span></li>`).join("")}</ul>` : `<p class="vazio">Ninguém de férias no período.</p>`}
         ${risco.length ? `<div class="alerta">${risco.length} férias com prazo concessivo vencendo ou ultrapassado (risco de pagamento em dobro).</div>` : ""}
       </section>
     </div>`;
+
+  $("#main").querySelectorAll("[data-modo]").forEach(bt => bt.onclick = () => { painelF.modo = bt.dataset.modo; renderPainel(); });
+  const liga = (id, k) => { const el = $(id); if (el) el.onchange = () => { if (el.value) painelF[k] = el.value; renderPainel(); }; };
+  liga("#pfMes","mes"); liga("#pfAno","ano"); liga("#pfDe","de"); liga("#pfAte","ate");
 }
 
 function filtrar(nome){
@@ -714,6 +781,58 @@ function desenharLinhas(nome){
   });
 }
 
+/* ---------- anexos (Supabase Storage) ---------- */
+let anexoRemover = false;
+function campoAnexo(fd, v){
+  anexoRemover = false;
+  if (!sb) return `<div class="f full"><span class="lbl">${fd.label}</span><small class="aviso">Anexos ficam disponíveis com o sistema conectado ao Supabase.</small></div>`;
+  const aceita = "image/*,application/pdf" + (fd.xml ? ",.xml,text/xml,application/xml" : "");
+  return `<div class="f full anexo"><label for="anxArquivo">${fd.label}</label>
+    <div class="anx-atual" id="anxAtual" ${v ? "" : "hidden"}>
+      <span class="anx-ico" aria-hidden="true">📎</span><span>Arquivo anexado</span>
+      <button type="button" class="btn" data-doc="${esc(v || "")}">Ver</button>
+      <button type="button" class="btn del" id="anxRemover">Remover</button>
+    </div>
+    <p class="anx-removido" id="anxRemovido" hidden>O anexo será removido ao salvar. <button type="button" class="link-in" id="anxDesfazer">Desfazer</button></p>
+    <input type="file" id="anxArquivo" accept="${aceita}">
+    <small>${v ? "Escolha um arquivo só se quiser substituir o atual. " : ""}${fd.dica || ""}</small>
+  </div>`;
+}
+function ligarAnexo(){
+  const rem = $("#anxRemover"); if (!rem) return;
+  rem.onclick = () => { anexoRemover = true; $("#anxAtual").hidden = true; $("#anxRemovido").hidden = false; };
+  $("#anxDesfazer").onclick = () => { anexoRemover = false; $("#anxAtual").hidden = false; $("#anxRemovido").hidden = true; };
+}
+async function prepararAnexo(file, permiteXml){
+  const nome = (file.name || "").toLowerCase();
+  if (file.size > 10 * 1024 * 1024 && !file.type.startsWith("image/")) throw new Error("O arquivo passa de 10 MB.");
+  if (file.type === "application/pdf" || nome.endsWith(".pdf")) return { blob:file, ext:"pdf", type:"application/pdf" };
+  if (permiteXml && (/xml/.test(file.type) || nome.endsWith(".xml"))) return { blob:new Blob([file], { type:"application/xml" }), ext:"xml", type:"application/xml" };
+  if (!file.type.startsWith("image/")) throw new Error(permiteXml ? "Envie uma foto, um PDF ou o XML da nota." : "Envie uma foto ou um PDF.");
+  let img;
+  try { img = await createImageBitmap(file); }
+  catch { throw new Error("Não consegui ler esta imagem. Envie em JPG, PNG ou PDF."); }
+  const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+  const blob = await new Promise(ok => c.toBlob(ok, "image/jpeg", 0.85));
+  if (!blob) throw new Error("Não consegui preparar a imagem.");
+  return { blob, ext:"jpg", type:"image/jpeg" };
+}
+async function enviarAnexo(file, fd){
+  const a = await prepararAnexo(file, fd.xml);
+  const path = `${fd.pasta}/${crypto.randomUUID()}.${a.ext}`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, a.blob, { contentType:a.type, upsert:false });
+  if (error) throw new Error("Falha ao enviar o anexo: " + error.message + ". Confira se o atualizacao_anexos.sql foi executado.");
+  return path;
+}
+function apagarAnexo(path){
+  // arquivos enviados pelos colaboradores (envios/) ficam guardados como histórico do envio
+  if (!sb || !path || path.startsWith("envios/")) return;
+  sb.storage.from(BUCKET).remove([path]).then(({ error }) => { if (error) console.warn("Anexo não removido:", error.message); });
+}
+
 /* ---------- formulário ---------- */
 function abrirForm(nome, row, envio){
   const m = MOD[nome]; row = row || {};
@@ -725,6 +844,7 @@ function abrirForm(nome, row, envio){
     const v = row[fd.k] ?? (fd.k === "status" ? Object.keys(fd.opts)[0] : "");
     const id = "fd_" + fd.k, req = fd.req ? "required" : "";
     if (fd.type === "hint") return `<p class="hint f full" id="hint" aria-live="polite"></p>`;
+    if (fd.type === "arquivo") return campoAnexo(fd, row[fd.k]);
     if (fd.type === "check") return `<label class="f chk"><input type="checkbox" name="${fd.k}" ${(row.id ? row[fd.k] : fd.def) ? "checked" : ""}> ${fd.label}</label>`;
     let input;
     if (fd.type === "colab"){
@@ -760,8 +880,7 @@ function abrirForm(nome, row, envio){
     }
   };
   form.oninput = atualizarDica; atualizarDica();
-  if (nome === "atestados" && row.arquivo_path)
-    $("#fields").insertAdjacentHTML("afterbegin", `<div class="f full"><button type="button" class="btn" data-doc="${esc(row.arquivo_path)}">Ver documento anexado</button></div>`);
+  ligarAnexo();
   $("#dlg").showModal();
 }
 
@@ -770,7 +889,7 @@ $("#form").addEventListener("submit", async e => {
   const { nome, row, envio } = editando, m = MOD[nome], form = e.target;
   const r = { ...row };
   m.fields.forEach(fd => {
-    if (fd.type === "hint") return;
+    if (fd.type === "hint" || fd.type === "arquivo") return;
     const el = form.elements[fd.k];
     if (fd.type === "check") r[fd.k] = el.checked;
     else if (fd.type === "number") r[fd.k] = el.value === "" ? null : parseFloat(el.value);
@@ -779,8 +898,22 @@ $("#form").addEventListener("submit", async e => {
   m.calc && m.calc(r);
   const erro = m.valida && m.valida(r);
   if (erro) return toast(erro, true);
+  const btSalvar = $("#dlgSalvar"), txtSalvar = btSalvar.textContent;
+  btSalvar.disabled = true;
+  let antigo = null;
   try {
+    const fdA = m.fields.find(f => f.type === "arquivo");
+    if (fdA){
+      const file = $("#anxArquivo")?.files[0];
+      if (file){
+        btSalvar.textContent = "Enviando anexo…";
+        r.arquivo_path = await enviarAnexo(file, fdA);
+        antigo = row.arquivo_path || null;
+      } else if (anexoRemover){ r.arquivo_path = null; antigo = row.arquivo_path || null; }
+    }
+    btSalvar.textContent = "Salvando…";
     const novoId = await store.save(nome, r);
+    if (antigo) apagarAnexo(antigo);
     if (envio){
       const { data:{ user } } = await sb.auth.getUser();
       const { error } = await sb.from(tb("atestados_envios")).update({ status:"aprovado", atestado_id: novoId, conferido_em: new Date().toISOString(), conferido_por: user?.email || null }).eq("id", envio.id);
@@ -789,6 +922,7 @@ $("#form").addEventListener("submit", async e => {
     $("#dlg").close(); toast(envio ? "Atestado conferido e lançado." : row.id ? "Alterações salvas." : "Registro salvo.");
     await carregar();
   } catch (err) { toast("Não foi possível salvar: " + (err.message || err), true); }
+  finally { btSalvar.disabled = false; btSalvar.textContent = txtSalvar; }
 });
 
 $("#dlgDel").onclick = async () => {
@@ -797,7 +931,7 @@ $("#dlgDel").onclick = async () => {
     ? `Excluir ${row.nome} do cadastro? Os atestados e férias dele continuam salvos. Se a pessoa saiu da empresa, prefira desmarcar "Colaborador ativo".`
     : `Excluir este registro de ${row.colaborador || row.descricao}? Essa ação não pode ser desfeita.`;
   if (!confirm(msg)) return;
-  try { await store.remove(nome, row.id); $("#dlg").close(); toast("Registro excluído."); await carregar(); }
+  try { await store.remove(nome, row.id); if (row.arquivo_path) apagarAnexo(row.arquivo_path); $("#dlg").close(); toast("Registro excluído."); await carregar(); }
   catch (err) { toast("Não foi possível excluir: " + (err.message || err), true); }
 };
 /* ---------- banco de horas ---------- */
@@ -1091,7 +1225,7 @@ $("#dlgClose").onclick = $("#dlgCancel").onclick = () => $("#dlg").close();
 /* ---------- exportação (abre no Excel) ---------- */
 function exportarCSV(nome){
   const m = MOD[nome], rows = filtrar(nome);
-  const campos = m.fields.filter(f => f.type !== "hint");
+  const campos = m.fields.filter(f => f.type !== "hint" && f.type !== "arquivo");
   const extra = ["atestados","ferias"].includes(nome) ? [{ k:"dias", label:"Dias" }] : [];
   const cols = [...campos, ...extra];
   const val = (f, r) => {

@@ -279,3 +279,20 @@ create index if not exists sgi_banco_horas_cpf_idx on public.sgi_banco_horas (cp
 alter table public.sgi_banco_horas enable row level security;
 drop policy if exists "logados_acesso_total" on public.sgi_banco_horas;
 create policy "logados_acesso_total" on public.sgi_banco_horas for all to authenticated using (true) with check (true);
+
+-- =====================================================================
+-- ANEXOS NOS LANÇAMENTOS DE ATESTADO E CUSTO
+-- =====================================================================
+alter table public.sgi_custos add column if not exists arquivo_path text;
+alter table public.sgi_atestados add column if not exists arquivo_path text;
+
+-- aceita também o XML da nota fiscal
+update storage.buckets
+   set allowed_mime_types = array['image/jpeg','image/png','image/webp','application/pdf','application/xml','text/xml']
+ where id = 'sgi-atestados';
+
+-- quem tem login pode anexar arquivos nas pastas atestados/ e custos/
+drop policy if exists "sgi_anexos_upload_logados" on storage.objects;
+create policy "sgi_anexos_upload_logados" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'sgi-atestados' and (storage.foldername(name))[1] in ('atestados', 'custos'));
