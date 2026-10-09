@@ -355,6 +355,7 @@ function situacaoPeriodo(p, usados){
   if (p.limite <= addDias(HOJE, 60)) return { txt:"vence em breve", cls:"bad" };
   return { txt:"disponível", cls:"" };
 }
+const diaUtil = d => { let x = d; while ([0,6].includes(parseD(x).getDay())) x = addDias(x, 1); return x; };
 const prazoConcessivo = r => r.aquisitivo_fim ? addMeses(r.aquisitivo_fim, 12) : null;
 function feriasEmRisco(r){
   const p = prazoConcessivo(r);
@@ -481,8 +482,9 @@ const MOD = {
       {k:"_periodo",label:"Período aquisitivo",type:"periodo"},
       {k:"aquisitivo_inicio",label:"Período aquisitivo: início",type:"date"},
       {k:"aquisitivo_fim",label:"Período aquisitivo: fim",type:"date"},
-      {k:"data_inicio",label:"Saída",type:"date",req:1},
-      {k:"data_fim",label:"Último dia de férias",type:"date",req:1},
+      {k:"data_inicio",label:"Saída (1º dia de férias)",type:"date",req:1},
+      {k:"dias",label:"Quantidade de dias",type:"number",req:1,min:5,max:30,step:1},
+      {k:"data_fim",label:"Último dia de férias (calculado)",type:"date",req:1},
       {k:"status",label:"Status",type:"select",opts:ST_FER,req:1},
       {k:"_hint",type:"hint"},
       {k:"abono",label:"Vendeu 10 dias (abono pecuniário)",type:"check"},
@@ -500,6 +502,7 @@ const MOD = {
     valida: r => {
       if (r.data_fim < r.data_inicio) return "O último dia não pode ser antes da saída.";
       if (r.dias > 30) return "Férias com mais de 30 dias. Confira as datas.";
+      if (r.dias < 5) return "Cada período de férias precisa ter pelo menos 5 dias (CLT).";
       if (r.aquisitivo_inicio){
         const usados = diasUsadosPeriodo(r.colaborador, r.aquisitivo_inicio, r.id);
         const pedidos = r.dias + (r.abono ? 10 : 0);
@@ -886,7 +889,7 @@ function abrirForm(nome, row, envio){
     }
     else if (fd.type === "select") input = `<select id="${id}" name="${fd.k}" ${req}>${fd.req ? "" : '<option value=""></option>'}${Object.entries(fd.opts).map(([k,l]) => `<option value="${k}" ${v === k ? "selected" : ""}>${l}</option>`).join("")}</select>`;
     else if (fd.type === "area") input = `<textarea id="${id}" name="${fd.k}">${esc(v)}</textarea>`;
-    else input = `<input id="${id}" name="${fd.k}" type="${fd.type || "text"}" ${fd.type === "number" ? 'step="0.01" min="0"' : ""} value="${esc(v)}" ${req} ${fd.ro ? 'readonly tabindex="-1" placeholder="Preenchida pelo cadastro"' : ""} ${fd.mask === "cpf" ? 'inputmode="numeric" maxlength="14"' : ""}>`;
+    else input = `<input id="${id}" name="${fd.k}" type="${fd.type || "text"}" ${fd.type === "number" ? `step="${fd.step || 0.01}" min="${fd.min ?? 0}"${fd.max ? ` max="${fd.max}"` : ""}` : ""} value="${esc(v)}" ${req} ${fd.ro ? 'readonly tabindex="-1" placeholder="Preenchida pelo cadastro"' : ""} ${fd.mask === "cpf" ? 'inputmode="numeric" maxlength="14"' : ""}>`;
     return `<div class="f ${fd.full || fd.type === "area" ? "full" : ""}"><label for="${id}">${fd.label}</label>${input}</div>`;
   }).join("");
 
@@ -933,6 +936,7 @@ function abrirForm(nome, row, envio){
         return;
       }
       const resta = 30 - p.usados;
+      restantesPeriodo = Math.max(resta, 0);
       info.innerHTML = `Calculado pela admissão em ${fmtD(c.data_admissao)}. `
         + (p.usados ? `Já lançados ${p.usados} dia(s) neste período, restam <b>${Math.max(resta,0)}</b>. ` : "Nenhum dia lançado neste período. ")
         + `Férias devem terminar até <b>${fmtD(p.limite)}</b>.`
@@ -945,6 +949,31 @@ function abrirForm(nome, row, envio){
     };
   };
   if (nome === "ferias") setTimeout(() => montarPeriodos(false), 0);
+
+  // férias: último dia = saída + quantidade de dias - 1
+  let restantesPeriodo = 30;
+  if (nome === "ferias"){
+    const fIni = form.data_inicio, fDias = form.dias, fFim = form.data_fim, fAbono = form.abono;
+    const sugestao = () => Math.max(0, Math.min(30, restantesPeriodo) - (fAbono.checked ? 10 : 0));
+    let ultimaSugestao = null;
+    const aplicarSugestao = (forcar) => {
+      const sg = sugestao();
+      if (forcar === true || !fDias.value || Number(fDias.value) === ultimaSugestao) fDias.value = sg || "";
+      ultimaSugestao = sg; calcularFim();
+    };
+    const calcularFim = () => {
+      const n = parseInt(fDias.value, 10);
+      if (fIni.value && n > 0) fFim.value = addDias(fIni.value, n - 1);
+    };
+    fIni.addEventListener("input", calcularFim);
+    fDias.addEventListener("input", calcularFim);
+    fFim.addEventListener("input", () => { const d = contaDias(fIni.value, fFim.value); if (d > 0) fDias.value = d; });
+    fAbono.addEventListener("change", () => aplicarSugestao());
+    $("#fields").addEventListener("change", e => {
+      if (e.target.id === "fd_colaborador" || e.target.id === "fd_periodo") setTimeout(() => aplicarSugestao(true), 0);
+    });
+    if (!row.id) setTimeout(() => aplicarSugestao(), 0);
+  }
   if (nome === "colaboradores") form.elements.cpf.oninput = e => { e.target.value = fmtCPF(e.target.value); };
   const atualizarDica = () => {
     const h = $("#hint"); if (!h) return;
@@ -957,7 +986,13 @@ function abrirForm(nome, row, envio){
       if (form.aquisitivo_inicio.value && !form.aquisitivo_fim.value) form.aquisitivo_fim.value = addDias(addMeses(form.aquisitivo_inicio.value, 12), -1);
       const d = contaDias(form.data_inicio.value, form.data_fim.value);
       const p = form.aquisitivo_fim.value ? addMeses(form.aquisitivo_fim.value, 12) : null;
-      h.textContent = [d ? `${d} dia(s) de férias.` : "", p ? `Precisa terminar até ${fmtD(p)} (prazo concessivo).` : ""].join(" ").trim();
+      const dow = form.data_inicio.value ? parseD(form.data_inicio.value).getDay() : null;
+      const retorno = form.data_fim.value ? addDias(form.data_fim.value, 1) : null;
+      h.textContent = [
+        d ? `${d} dia(s) de férias${retorno ? `, volta ao trabalho em ${fmtD(diaUtil(retorno))} (${parseD(diaUtil(retorno)).toLocaleDateString("pt-BR", { weekday:"long" })})` : ""}.` : "",
+        p ? `Precisa terminar até ${fmtD(p)} (prazo concessivo).` : "",
+        dow === 5 || dow === 6 ? "Atenção: pela CLT as férias não podem começar nos 2 dias antes do descanso semanal ou de feriado." : ""
+      ].join(" ").trim();
     }
   };
   form.oninput = atualizarDica; atualizarDica();
