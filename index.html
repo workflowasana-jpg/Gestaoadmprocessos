@@ -361,7 +361,7 @@ const SUGESTAO = {
   acidente:[0,"Acima de 15 dias o afastamento passa a ser pago pelo INSS. Lembre de emitir a CAT."],
   doenca:[0,"Acima de 15 dias o colaborador deve ser encaminhado ao INSS."]
 };
-const CATS = { inventario:"Inventário", projeto:"Projetos", auditoria:"Auditoria externa" };
+const CATS = { inventario:"Inventário", projeto:"Projetos", auditoria:"Auditoria externa", endomarketing:"Endomarketing" };
 const ST_CUSTO = { previsto:"Previsto", aprovado:"Aprovado", pago:"Pago" };
 const ST_FER = { programada:"Programada", aprovada:"Aprovada", em_gozo:"Em gozo", concluida:"Concluída" };
 
@@ -478,7 +478,7 @@ const MOD = {
     rodape: rows => `<span>${rows.length} registro(s)</span><span>Total de <b>${soma(rows,"dias")}</b> dias de afastamento</span>`
   },
   custos: {
-    titulo:"Custos", desc:"Inventário, projetos e auditorias externas.",
+    titulo:"Custos", desc:"Inventário, projetos, auditorias externas e endomarketing.",
     nome:"custo", dataKey:"data", busca:["descricao","referencia","fornecedor","nota_fiscal"],
     filtro:{ k:"categoria", label:"Todas as categorias", opts:CATS },
     filtro2:{ k:"status", label:"Todos os status", opts:ST_CUSTO },

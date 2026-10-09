@@ -41,7 +41,7 @@ create table if not exists public.sgi_atestados (
 create table if not exists public.sgi_custos (
   id          uuid primary key default gen_random_uuid(),
   created_at  timestamptz not null default now(),
-  categoria   text not null check (categoria in ('inventario','projeto','auditoria')),
+  categoria   text not null check (categoria in ('inventario','projeto','auditoria','endomarketing')),
   descricao   text not null,
   referencia  text,
   fornecedor  text,
@@ -296,3 +296,25 @@ drop policy if exists "sgi_anexos_upload_logados" on storage.objects;
 create policy "sgi_anexos_upload_logados" on storage.objects
   for insert to authenticated
   with check (bucket_id = 'sgi-atestados' and (storage.foldername(name))[1] in ('atestados', 'custos'));
+
+-- =====================================================================
+-- NOVA CATEGORIA DE CUSTO: ENDOMARKETING
+-- =====================================================================
+do $$
+declare r record;
+begin
+  for r in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    where rel.relnamespace = 'public'::regnamespace
+      and rel.relname = 'sgi_custos'
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%categoria%'
+  loop
+    execute format('alter table public.sgi_custos drop constraint %I', r.conname);
+  end loop;
+end $$;
+
+alter table public.sgi_custos add constraint sgi_custos_categoria_check
+  check (categoria in ('inventario','projeto','auditoria','endomarketing'));
