@@ -104,6 +104,7 @@ form,.done{padding:20px 24px 26px;display:grid;gap:16px}
           <option value="">Selecione</option>
           <option value="doenca">Doença</option>
           <option value="acidente">Acidente</option>
+          <option value="declaracao">Declaração (comparecimento)</option>
           <option value="eleitoral">Eleitoral</option>
           <option value="maternidade">Licença maternidade</option>
           <option value="paternidade">Licença paternidade</option>
@@ -156,6 +157,7 @@ const fmtCPF = v => { const d = soDig(v).slice(0,11); return d.replace(/(\d{3})(
 const parseD = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
 const contaDias = (a,b) => a && b ? Math.round((parseD(b) - parseD(a)) / 864e5) + 1 : 0;
 const DICAS = {
+  declaracao: "Declaração: se foi só parte do dia, informe o horário na observação.",
   maternidade: "Licença maternidade: normalmente 120 dias.",
   paternidade: "Licença paternidade: normalmente 5 dias.",
   acidente: "Em caso de acidente, avise a supervisão para a emissão da CAT."
